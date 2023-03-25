@@ -29,7 +29,7 @@ type createCollectionRequest struct {
 	Web          string `json:"web"`
 }
 
-func (server *Server) createCollection(ctx *gin.Context) {
+func (s *Server) createCollection(ctx *gin.Context) {
 	var req createCollectionRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
@@ -57,11 +57,11 @@ func (server *Server) createCollection(ctx *gin.Context) {
 		Discord:      req.Discord,
 		Web:          req.Web,
 	}
-	collection, err := server.store.CreateCollection(ctx, arg)
+	err := s.store.Insert(ctx, arg)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, collection)
+	ctx.JSON(http.StatusOK, db.Collection{})
 }

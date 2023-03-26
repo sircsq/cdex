@@ -3,6 +3,7 @@ package api
 import (
 	"cdex/exchange"
 	"cdex/exchange/orderbook"
+	"errors"
 	"github.com/gin-gonic/gin"
 	"net/http"
 )
@@ -94,7 +95,19 @@ func (s *Server) placeOrder(ctx *gin.Context) {
 	}
 
 	o := orderbook.NewOrder(req.Bid, req.Collection, req.TokenID, req.Quantity)
-	ob.PlaceLimitOrder(req.Price, o)
 
-	ctx.JSON(http.StatusOK, msgResponse("order placed"))
+	switch req.Type {
+	case exchange.LimitOrder:
+		ob.PlaceLimitOrder(req.Price, o)
+		ctx.JSON(http.StatusOK, msgResponse("limit order placed"))
+	case exchange.MarketOrder:
+		_, err = ob.PlaceMarketOrder(o)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+		ctx.JSON(http.StatusOK, msgResponse("market order placed"))
+	default:
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("unknown order type")))
+	}
 }

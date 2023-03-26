@@ -104,3 +104,36 @@ func (s *Server) listCollection(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, collections)
 }
+
+func (s *Server) listAddressCollection(ctx *gin.Context) {
+	var (
+		err         error
+		address     string
+		page        int64 = 1
+		pageSize    int64 = 10
+		collections []*db.Collection
+	)
+	address = ctx.Param("address")
+	if pageStr, ok := ctx.GetQuery("page"); ok {
+		page, err = strconv.ParseInt(pageStr, 10, 64)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+	}
+	if pageSizeStr, ok := ctx.GetQuery("pageSize"); ok {
+		pageSize, err = strconv.ParseInt(pageSizeStr, 10, 64)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+	}
+
+	collections, err = s.store.GetCollectionByCreator(ctx, address, int(page), int(pageSize))
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, collections)
+}

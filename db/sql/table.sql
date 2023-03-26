@@ -23,3 +23,16 @@ CREATE TABLE collections(
     web varchar(256),
     PRIMARY KEY (id)
 );
+
+CREATE TABLE items(
+    name varchar(32) not null,
+    collection integer not null,
+    token_id integer,
+    creator varchar(65) not null,
+    created_at timestamp not null,
+    chain smallint not null,
+    image varchar(128) not null,
+    description varchar(128),
+    properties varchar(128),
+    primary key (collection, token_id)
+);

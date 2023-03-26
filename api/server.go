@@ -20,9 +20,19 @@ func NewServer(store db.Storage) *Server {
 
 	router.StaticFS("/static/", gin.Dir("./public/images", false))
 
+	router.GET("/api/index/explore", server.listCollection)
+
+	// collection
 	router.POST("/api/collection", server.createCollection)
 	router.GET("/api/collection/list", server.listCollection)
+	router.GET("/api/collection/:address/list", server.listAddressCollection)
+
+	// item
 	router.POST("/api/item", server.createItem)
+	router.GET("/api/item/list", server.listItem)
+	router.GET("/api/item/:collection/list", server.listCollectionItem)
+
+	// order
 
 	server.router = router
 

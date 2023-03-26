@@ -26,23 +26,14 @@ type CreateCollectionParams struct {
 	Web          string    `json:"web"`
 }
 
-// name varchar(32) not null,
-// collection_id integer not null,
-// token_id integer,
-// chain smallint not null,
-// creator varchar(65) not null,
-// created_at timestamp not null,
-// image varchar(128) not null,
-// description varchar(128),
-// properties varchar(128),
 type CreateItemParams struct {
-	Name         string    `json:"name"`
-	CollectionID int       `json:"collection_id"`
-	TokenID      int       `json:"token_id"`
-	Chain        int8      `json:"chain"`
-	CreatedAt    time.Time `json:"created_at"`
-	Creator      string    `json:"creator"`
-	Image        string    `json:"image"`
-	Description  string    `json:"description"`
-	Properties   string    `json:"properties"`
+	Name        string    `json:"name"`
+	Collection  int       `json:"collection"`
+	TokenID     int       `json:"token_id"`
+	Chain       int8      `json:"chain"`
+	CreatedAt   time.Time `json:"created_at"`
+	Creator     string    `json:"creator"`
+	Image       string    `json:"image"`
+	Description string    `json:"description"`
+	Properties  string    `json:"properties"`
 }

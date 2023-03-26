@@ -28,12 +28,13 @@ type Collection struct {
 }
 
 type Item struct {
-	Name         string    `json:"name"`
-	CollectionID int       `json:"collection_id"`
-	TokenID      int       `json:"token_id"`
-	Chain        int8      `json:"chain"`
-	Creator      string    `json:"creator"`
-	CreatedAt    time.Time `json:"created_at"`
-	Description  string    `json:"description"`
-	Properties   string    `json:"properties"`
+	Name        string    `json:"name"`
+	Collection  int       `json:"collection"`
+	TokenID     int       `json:"token_id"`
+	Chain       int8      `json:"chain"`
+	Creator     string    `json:"creator"`
+	CreatedAt   time.Time `json:"created_at"`
+	Image       string    `json:"image"`
+	Description string    `json:"description"`
+	Properties  string    `json:"properties"`
 }

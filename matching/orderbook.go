@@ -9,12 +9,12 @@ import (
 type Match struct {
 	Ask        *Order
 	Bid        *Order
-	SizeFilled float64
+	SizeFilled int
 	Price      float64
 }
 
 type Order struct {
-	Size      float64
+	Size      int
 	Bid       bool
 	Limit     *Limit
 	Timestamp int64
@@ -34,7 +34,7 @@ func (o Orders) Less(i, j int) bool {
 	return o[i].Timestamp < o[j].Timestamp
 }
 
-func NewOrder(bid bool, size float64) *Order {
+func NewOrder(bid bool, size int) *Order {
 	return &Order{
 		Size:      size,
 		Bid:       bid,
@@ -44,7 +44,7 @@ func NewOrder(bid bool, size float64) *Order {
 }
 
 func (o *Order) String() string {
-	return fmt.Sprintf("[size:%.2f]", o.Size)
+	return fmt.Sprintf("[size:%v]", o.Size)
 }
 
 func (o *Order) IsFilled() bool {
@@ -54,7 +54,7 @@ func (o *Order) IsFilled() bool {
 type Limit struct {
 	Price       float64
 	Orders      Orders
-	TotalVolume float64
+	TotalVolume int
 }
 
 type Limits []*Limit
@@ -101,7 +101,7 @@ func NewLimit(price float64) *Limit {
 }
 
 func (l *Limit) String() string {
-	return fmt.Sprintf("[price: %.2f | Volume: %.2f | Orders: %v]", l.Price, l.TotalVolume, l.Orders)
+	return fmt.Sprintf("[price: %v | Volume: %v | Orders: %v]", l.Price, l.TotalVolume, l.Orders)
 }
 
 func (l *Limit) AddOrder(o *Order) {
@@ -154,7 +154,7 @@ func (l *Limit) fillOrder(a, b *Order) Match {
 	var (
 		bid        *Order
 		ask        *Order
-		sizeFilled float64
+		sizeFilled int
 	)
 
 	if a.Bid {
@@ -204,7 +204,7 @@ func (ob *OrderBook) PlaceMarketOrder(o *Order) []Match {
 
 	if o.Bid {
 		if o.Size > ob.AskTotalVolume() {
-			panic(fmt.Errorf("not enough volume [size: %.2f] for market order [size: %.2f]", ob.AskTotalVolume(), o.Size))
+			panic(fmt.Errorf("not enough volume [size: %v] for market order [size: %v]", ob.AskTotalVolume(), o.Size))
 		}
 
 		for _, limit := range ob.Asks() {
@@ -217,7 +217,7 @@ func (ob *OrderBook) PlaceMarketOrder(o *Order) []Match {
 		}
 	} else {
 		if o.Size > ob.BidTotalVolume() {
-			panic(fmt.Errorf("not enough volume [size: %.2f] for market order [size: %.2f]", ob.BidTotalVolume(), o.Size))
+			panic(fmt.Errorf("not enough volume [size: %v] for market order [size: %v]", ob.BidTotalVolume(), o.Size))
 		}
 		for _, limit := range ob.Bids() {
 			limitMatches := limit.Fill(o)
@@ -279,16 +279,16 @@ func (ob *OrderBook) CancelOrder(o *Order) {
 	limit.DeleteOrder(o)
 }
 
-func (ob *OrderBook) BidTotalVolume() float64 {
-	totalVolume := 0.0
+func (ob *OrderBook) BidTotalVolume() int {
+	totalVolume := 0
 	for i := 0; i < len(ob.bids); i++ {
 		totalVolume += ob.bids[i].TotalVolume
 	}
 	return totalVolume
 }
 
-func (ob *OrderBook) AskTotalVolume() float64 {
-	totalVolume := 0.0
+func (ob *OrderBook) AskTotalVolume() int {
+	totalVolume := 0
 	for i := 0; i < len(ob.asks); i++ {
 		totalVolume += ob.asks[i].TotalVolume
 	}

@@ -2,20 +2,25 @@ package api
 
 import (
 	"cdex/db"
+	"cdex/exchange"
 	"github.com/gin-gonic/gin"
 )
 
 // Server serves HTTP requests for our banking service.
 type Server struct {
+	ex     *exchange.Exchange
 	store  db.Storage
 	router *gin.Engine
 }
 
 // NewServer creates a new HTTP server and setup routing.
 func NewServer(store db.Storage) *Server {
+	ex := exchange.NewExchange()
 	server := &Server{
+		ex:    ex,
 		store: store,
 	}
+
 	router := gin.Default()
 
 	router.StaticFS("/static/", gin.Dir("./public/images", false))
@@ -33,6 +38,8 @@ func NewServer(store db.Storage) *Server {
 	router.GET("/api/item/:collection/list", server.listCollectionItem)
 
 	// order
+	router.GET("/api/book/:market", server.getMartBook)
+	router.POST("/api/order", server.placeOrder)
 
 	server.router = router
 
@@ -46,4 +53,8 @@ func (s *Server) Start(address string) error {
 
 func errorResponse(err error) gin.H {
 	return gin.H{"error": err.Error()}
+}
+
+func msgResponse(msg string) gin.H {
+	return gin.H{"msg": msg}
 }

@@ -3,7 +3,7 @@ package db
 import "time"
 
 type Collection struct {
-	ID           int64     `json:"ID"`
+	ID           int       `json:id"`
 	Name         string    `json:"name"`
 	Address      string    `json:"address"`
 	Creator      string    `json:"creator"`

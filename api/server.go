@@ -18,7 +18,10 @@ func NewServer(store db.Storage) *Server {
 	}
 	router := gin.Default()
 
+	router.StaticFS("/static/", gin.Dir("./public/images", false))
+
 	router.POST("/api/collection", server.createCollection)
+	router.GET("/api/collection/list", server.listCollection)
 	router.POST("/api/item", server.createItem)
 
 	server.router = router

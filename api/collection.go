@@ -4,6 +4,7 @@ import (
 	"cdex/db"
 	"github.com/gin-gonic/gin"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -14,7 +15,8 @@ type createCollectionRequest struct {
 	Creator      string `json:"creator" binding:"required"`
 	Type         int8   `json:"type" binding:"numeric"`
 	Tax          int8   `json:"tax" binding:"numeric"`
-	Currency     string `json:"currency"`
+	Symbol       string `json:"symbol" binding:"required"`
+	Currency     string `json:"currency" binding:"required"`
 	Visible      int8   `json:"visible"`
 	Status       int8   `json:"status"`
 	Image        string `json:"image" binding:"required"`
@@ -30,7 +32,11 @@ type createCollectionRequest struct {
 }
 
 func (s *Server) createCollection(ctx *gin.Context) {
-	var req createCollectionRequest
+	var (
+		err error
+		req createCollectionRequest
+		c   *db.Collection
+	)
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -42,6 +48,7 @@ func (s *Server) createCollection(ctx *gin.Context) {
 		Creator:      req.Creator,
 		Type:         req.Type,
 		Tax:          req.Tax,
+		Symbol:       req.Symbol,
 		Currency:     req.Currency,
 		Visible:      req.Visible,
 		Status:       req.Status,
@@ -57,11 +64,43 @@ func (s *Server) createCollection(ctx *gin.Context) {
 		Discord:      req.Discord,
 		Web:          req.Web,
 	}
-	err := s.store.Insert(ctx, arg)
+	c, err = s.store.InsertCollection(ctx, arg)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, db.Collection{})
+	ctx.JSON(http.StatusOK, c)
+}
+
+func (s *Server) listCollection(ctx *gin.Context) {
+	var (
+		err         error
+		page        int64 = 1
+		pageSize    int64 = 10
+		collections []*db.Collection
+	)
+
+	if pageStr, ok := ctx.GetQuery("page"); ok {
+		page, err = strconv.ParseInt(pageStr, 10, 64)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+	}
+	if pageSizeStr, ok := ctx.GetQuery("pageSize"); ok {
+		pageSize, err = strconv.ParseInt(pageSizeStr, 10, 64)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+	}
+
+	collections, err = s.store.GetCollections(ctx, int(page), int(pageSize))
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, collections)
 }

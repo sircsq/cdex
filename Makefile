@@ -2,7 +2,7 @@ build:
 	go build -o bin/cdex
 
 run: build
-	./bin/dex
+	./bin/cdex
 
 test:
 	go test -v ./...

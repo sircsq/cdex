@@ -1,19 +1,27 @@
 package orderbook
 
 import (
+	"errors"
 	"fmt"
+	"math/rand"
 	"sort"
 	"time"
 )
 
 type Match struct {
-	Ask        *Order
-	Bid        *Order
+	Collection int
+	TokenID    int
 	SizeFilled int
 	Price      float64
+	Timestamp  int64
+	Ask        *Order
+	Bid        *Order
 }
 
 type Order struct {
+	ID         int64
+	Currency   string
+	Owner      string
 	Collection int
 	TokenID    int
 	Quantity   int
@@ -36,8 +44,11 @@ func (o Orders) Less(i, j int) bool {
 	return o[i].Timestamp < o[j].Timestamp
 }
 
-func NewOrder(bid bool, collection, tokenID, quantity int) *Order {
+func NewOrder(owner, currency string, bid bool, collection, tokenID, quantity int) *Order {
 	return &Order{
+		ID:         int64(rand.Intn(100000000)),
+		Currency:   currency,
+		Owner:      owner,
 		Collection: collection,
 		TokenID:    tokenID,
 		Quantity:   quantity,
@@ -74,7 +85,6 @@ func (a ByBestAsk) Swap(i, j int) {
 	a.Limits[i], a.Limits[j] = a.Limits[j], a.Limits[i]
 }
 
-// Less 卖单价格低先出
 func (a ByBestAsk) Less(i, j int) bool {
 	return a.Limits[i].Price < a.Limits[j].Price
 }
@@ -91,7 +101,6 @@ func (b ByBestBid) Swap(i, j int) {
 	b.Limits[i], b.Limits[j] = b.Limits[j], b.Limits[i]
 }
 
-// Less 买单价格高先出
 func (b ByBestBid) Less(i, j int) bool {
 	return b.Limits[i].Price > b.Limits[j].Price
 }
@@ -139,7 +148,11 @@ func (l *Limit) Fill(o *Order) []Match {
 			break
 		}
 
-		match := l.fillOrder(order, o)
+		match, err := l.fillOrder(order, o)
+		if err != nil {
+			return []Match{}
+		}
+
 		matches = append(matches, match)
 		l.TotalVolume -= match.SizeFilled
 		if order.IsFilled() {
@@ -154,7 +167,10 @@ func (l *Limit) Fill(o *Order) []Match {
 	return matches
 }
 
-func (l *Limit) fillOrder(a, b *Order) Match {
+func (l *Limit) fillOrder(a, b *Order) (Match, error) {
+	if a.Collection != b.Collection || a.TokenID != b.TokenID {
+		return Match{}, errors.New("collection or token not is not matched")
+	}
 	var (
 		bid        *Order
 		ask        *Order
@@ -180,11 +196,14 @@ func (l *Limit) fillOrder(a, b *Order) Match {
 	}
 
 	return Match{
-		Bid:        bid,
-		Ask:        ask,
+		Collection: a.Collection,
+		TokenID:    a.TokenID,
 		SizeFilled: sizeFilled,
 		Price:      l.Price,
-	}
+		Timestamp:  time.Now().UnixNano(),
+		Bid:        bid,
+		Ask:        ask,
+	}, nil
 }
 
 type OrderBook struct {

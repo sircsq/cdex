@@ -40,6 +40,7 @@ func NewServer(store db.Storage) *Server {
 	// order
 	router.GET("/api/book/:market", server.getMartBook)
 	router.POST("/api/order", server.placeOrder)
+	router.POST("/api/order/cancel", server.cancelOrder)
 
 	server.router = router
 

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"cdex/exchange"
 	"context"
 	"database/sql"
 	"github.com/uptrace/bun"
@@ -10,6 +11,7 @@ import (
 )
 
 type Storage interface {
+	Insert(ctx context.Context, value interface{}) error
 	InsertCollection(ctx context.Context, arg CreateCollectionParams) (*Collection, error)
 	InsertItem(ctx context.Context, arg CreateItemParams) (*Item, error)
 	GetCollections(ctx context.Context, page, pageSize int) ([]*Collection, error)
@@ -17,6 +19,8 @@ type Storage interface {
 	GetCollectionByID(ctx context.Context, id int) (*Collection, error)
 	GetCollectionByCreator(ctx context.Context, address string, page, pageSize int) ([]*Collection, error)
 	GetCollectionItems(ctx context.Context, id, page, pageSize int) ([]*Item, error)
+
+	GetOrders(ctx context.Context, bid, page, pageSize int, status, sort string) ([]*exchange.Order, error)
 }
 
 type NartDB struct {
@@ -34,6 +38,25 @@ func NewNartDB(dsn string) *NartDB {
 	db := bun.NewDB(sqlDB, pgdialect.New())
 
 	return &NartDB{db: db}
+}
+
+func (db *NartDB) Insert(ctx context.Context, value interface{}) error {
+	switch values := value.(type) {
+	case []interface{}:
+		for v := range values {
+			if _, err := db.db.NewInsert().
+				Model(v).
+				Exec(ctx); err != nil {
+				return err
+			}
+		}
+	case interface{}:
+		_, err := db.db.NewInsert().
+			Model(value).
+			Exec(ctx)
+		return err
+	}
+	return nil
 }
 
 func (db *NartDB) InsertCollection(ctx context.Context, arg CreateCollectionParams) (*Collection, error) {
@@ -118,4 +141,22 @@ func (db *NartDB) GetCollectionByCreator(ctx context.Context, address string, pa
 		return nil, err
 	}
 	return collections, nil
+}
+
+func (db *NartDB) GetOrders(ctx context.Context, bid, page, pageSize int, status, sort string) ([]*exchange.Order, error) {
+	var (
+		err    error
+		orders []*exchange.Order
+	)
+	if sort == "desc" {
+		err = db.db.NewSelect().Model((*exchange.Order)(nil)).Where("bid = ? AND status = ?", bid, status).Order("created_at DESC").Limit(pageSize).Offset(pageSize*(page-1)).Scan(ctx, &orders)
+	} else {
+		err = db.db.NewSelect().Model((*exchange.Order)(nil)).Where("bid = ? AND status = ?", bid, status).Order("created_at ASC").Limit(pageSize).Offset(pageSize*(page-1)).Scan(ctx, &orders)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return orders, nil
 }

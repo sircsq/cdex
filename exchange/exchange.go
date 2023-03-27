@@ -19,7 +19,7 @@ const (
 )
 
 type Exchange struct {
-	Orders     map[string][]*Order // user => []*Order
+	Orders     map[string][]*Order2 // user => []*Order
 	orderBooks map[Market]*OrderBook
 	mu         *sync.RWMutex
 }
@@ -30,7 +30,7 @@ func NewExchange() *Exchange {
 
 	return &Exchange{
 		orderBooks: orderBooks,
-		Orders:     make(map[string][]*Order),
+		Orders:     make(map[string][]*Order2),
 		mu:         &sync.RWMutex{},
 	}
 }
@@ -44,22 +44,36 @@ func (ex *Exchange) OrderBook(market Market) (*OrderBook, error) {
 	return ob, nil
 }
 
-func (ex *Exchange) PlaceLimitOrder(market Market, price float64, order *Order) error {
+func (ex *Exchange) PlaceLimitOrder(market Market, price float64, order *Order2) ([]Match, error) {
+	var (
+		err     error
+		matches []Match
+	)
 	ob, err := ex.OrderBook(market)
 	if err != nil {
-		return err
+		return matches, err
 	}
 
-	ob.placeLimitOrder(price, order)
+	matches, err = ob.placeLimitOrder(price, order)
+	if err != nil {
+		return matches, err
+	}
 
 	ex.mu.Lock()
-	ex.Orders[order.Owner] = append(ex.Orders[order.Owner], order)
+	if len(matches) == 0 {
+		ex.Orders[order.Owner] = append(ex.Orders[order.Owner], order)
+	} else {
+		for _, m := range matches {
+			delete(ex.Orders, m.Ask.Owner)
+			delete(ex.Orders, m.Bid.Owner)
+		}
+	}
 	ex.mu.Unlock()
 
-	return nil
+	return matches, nil
 }
 
-func (ex *Exchange) PlaceMarketOrder(market Market, order *Order) ([]Match, error) {
+func (ex *Exchange) PlaceMarketOrder(market Market, order *Order2) ([]Match, error) {
 	var (
 		err     error
 		matches []Match
@@ -71,6 +85,15 @@ func (ex *Exchange) PlaceMarketOrder(market Market, order *Order) ([]Match, erro
 	if err != nil {
 		return matches, err
 	}
+
+	ex.mu.Lock()
+	if len(matches) > 0 {
+		for _, m := range matches {
+			delete(ex.Orders, m.Ask.Owner)
+			delete(ex.Orders, m.Bid.Owner)
+		}
+	}
+	ex.mu.Unlock()
 
 	return matches, nil
 }

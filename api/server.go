@@ -43,11 +43,10 @@ func NewServer(store db.Storage) *Server {
 	router.GET("/api/item/:collection/list", server.listCollectionItem)
 
 	// order
-	router.GET("/api/book/:market", server.getMartBook)
-	router.POST("/api/order", server.placeOrder)
+	router.POST("/api/order", server.createOrder)
+	router.GET("/api/order/bids", server.getBidOrders)
+	router.GET("/api/order/asks", server.getAskOrders)
 	router.POST("/api/order/cancel", server.cancelOrder)
-
-	router.GET("/api/subscribe", server.subscribe)
 
 	server.router = router
 

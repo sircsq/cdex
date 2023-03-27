@@ -37,16 +37,19 @@ CREATE TABLE items(
     primary key (collection, token_id)
 );
 
-CREATE TABLE t_order(
+CREATE TABLE orders(
     id varchar(128) not null,
     collection integer not null,
     token_id integer not null,
     owner varchar(65) not null,
     quantity integer not null,
-    price integer not null,
-    side smallint not null,
+    price decimal(18,2) not null,
+    bid smallint not null,
     created_at timestamp not null,
     currency varchar(16) not null,
-    status smallint not null,
+    status varchar(16) not null,
     PRIMARY KEY (id)
 );
+
+CREATE INDEX order_id_index ON orders(id);
+

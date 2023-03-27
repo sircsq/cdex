@@ -3,11 +3,24 @@ package api
 import (
 	"cdex/exchange"
 	"errors"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"net/http"
+	"strconv"
 )
 
 type PlaceOrderRequest struct {
+	Owner      string  `json:"owner" binding:"required"`
+	Currency   string  `json:"currency" binding:"required"`
+	Market     string  `json:"market" binding:"required"`
+	Bid        int8    `json:"bid"`
+	Collection int     `json:"collection" binding:"required,numeric"`
+	TokenID    int     `json:"token_id" binding:"required,numeric"`
+	Quantity   int     `json:"quantity" binding:"required,numeric"`
+	Price      float64 `json:"price"`
+}
+
+type PlaceOrderRequest2 struct {
 	Owner      string             `json:"owner" binding:"required"`
 	Currency   string             `json:"currency" binding:"required"`
 	Market     exchange.Market    `json:"market" binding:"required"`
@@ -20,16 +33,15 @@ type PlaceOrderRequest struct {
 }
 
 type OrderData struct {
-	ID         string               `json:"id"`
-	Currency   string               `json:"currency"`
-	Owner      string               `json:"owner"`
-	Bid        bool                 `json:"bid"`
-	Collection int                  `json:"collection"`
-	TokenID    int                  `json:"token_id"`
-	Quantity   int                  `json:"quantity"`
-	Price      float64              `json:"price"`
-	Timestamp  int64                `json:"timestamp"`
-	Status     exchange.OrderStatus `json:"status"`
+	ID         string  `json:"id"`
+	Currency   string  `json:"currency"`
+	Owner      string  `json:"owner"`
+	Bid        bool    `json:"bid"`
+	Collection int     `json:"collection"`
+	TokenID    int     `json:"token_id"`
+	Quantity   int     `json:"quantity"`
+	Price      float64 `json:"price"`
+	Timestamp  int64   `json:"timestamp"`
 }
 
 type OrderBookData struct {
@@ -39,7 +51,11 @@ type OrderBookData struct {
 	Bids           []*OrderData `json:"bids"`
 }
 
-func (s *Server) getMartBook(ctx *gin.Context) {
+func (s *Server) getMarket(ctx *gin.Context) {
+
+}
+
+func (s *Server) getMartBook2(ctx *gin.Context) {
 	market := exchange.Market(ctx.Param("market"))
 	ob, err := s.ex.OrderBook(market)
 	if err != nil {
@@ -66,7 +82,6 @@ func (s *Server) getMartBook(ctx *gin.Context) {
 				Quantity:   o.Quantity,
 				Timestamp:  o.Timestamp,
 				Price:      limit.Price,
-				Status:     o.Status,
 			}
 			orderBookData.Asks = append(orderBookData.Asks, &order)
 		}
@@ -84,7 +99,6 @@ func (s *Server) getMartBook(ctx *gin.Context) {
 				Quantity:   o.Quantity,
 				Timestamp:  o.Timestamp,
 				Price:      limit.Price,
-				Status:     o.Status,
 			}
 			orderBookData.Bids = append(orderBookData.Bids, &order)
 		}
@@ -93,41 +107,160 @@ func (s *Server) getMartBook(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, orderBookData)
 }
 
+type PlaceOrderResponse2 struct {
+	OrderID string           `json:"order_id"`
+	Matches []exchange.Match `json:"matches"`
+}
+
 type PlaceOrderResponse struct {
 	OrderID string `json:"order_id"`
 }
 
-func (s *Server) placeOrder(ctx *gin.Context) {
+func (s *Server) createOrder(ctx *gin.Context) {
 	var (
-		err     error
-		req     PlaceOrderRequest
-		res     PlaceOrderResponse
-		matches []exchange.Match
+		err error
+		req PlaceOrderRequest
+		res PlaceOrderResponse
 	)
 
 	if err = ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusOK, errorResponse(err))
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if req.Quantity != 1 {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid quantity")))
 		return
 	}
 
-	order := exchange.NewOrder(req.Owner, req.Currency, req.Bid, req.Collection, req.TokenID, req.Quantity, exchange.PendingOrder)
+	order := exchange.NewOrder(req.Owner, req.Currency, req.Bid, req.Collection, req.TokenID, req.Quantity, req.Price)
+	err = s.store.Insert(ctx, order)
+	if err != nil {
+		fmt.Println("--->>>", err)
+		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+		return
+	}
 	res.OrderID = order.ID
 
-	switch req.Type {
-	case exchange.LimitOrder:
-		err = s.ex.PlaceLimitOrder(req.Market, req.Price, order)
+	ctx.JSON(http.StatusOK, res)
+}
+
+func (s *Server) getBidOrders(ctx *gin.Context) {
+	var (
+		err      error
+		page     int64 = 1
+		pageSize int64 = 10
+		orders   []*exchange.Order
+		sort     = "desc"
+		status   = "pending"
+	)
+	sortParam, _ := ctx.GetQuery("sort")
+	if sortParam != "desc" {
+		sort = sortParam
+	}
+	statusParam, _ := ctx.GetQuery("status")
+	if statusParam != "pending" {
+		status = statusParam
+	}
+
+	if pageStr, ok := ctx.GetQuery("page"); ok {
+		page, err = strconv.ParseInt(pageStr, 10, 64)
 		if err != nil {
 			ctx.JSON(http.StatusBadRequest, errorResponse(err))
 			return
 		}
-		ctx.JSON(http.StatusOK, res)
-	case exchange.MarketOrder:
-		matches, err = s.ex.PlaceMarketOrder(req.Market, order)
+	}
+	if pageSizeStr, ok := ctx.GetQuery("pageSize"); ok {
+		pageSize, err = strconv.ParseInt(pageSizeStr, 10, 64)
 		if err != nil {
 			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
 		}
-		//_ = matches
-		ctx.JSON(http.StatusOK, matches)
+	}
+
+	orders, err = s.store.GetOrders(ctx, 1, int(page), int(pageSize), status, sort)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, orders)
+}
+
+func (s *Server) getAskOrders(ctx *gin.Context) {
+	var (
+		err      error
+		page     int64 = 1
+		pageSize int64 = 10
+		orders   []*exchange.Order
+		sort     = "desc"
+		status   = "pending"
+	)
+	sortParam, _ := ctx.GetQuery("sort")
+	if sortParam != "desc" {
+		sort = sortParam
+	}
+	statusParam, _ := ctx.GetQuery("status")
+	if statusParam != "pending" {
+		status = statusParam
+	}
+
+	if pageStr, ok := ctx.GetQuery("page"); ok {
+		page, err = strconv.ParseInt(pageStr, 10, 64)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+	}
+	if pageSizeStr, ok := ctx.GetQuery("pageSize"); ok {
+		pageSize, err = strconv.ParseInt(pageSizeStr, 10, 64)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+	}
+
+	orders, err = s.store.GetOrders(ctx, 0, int(page), int(pageSize), status, sort)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, orders)
+}
+
+func (s *Server) placeOrder2(ctx *gin.Context) {
+	var (
+		err error
+		req PlaceOrderRequest2
+		res PlaceOrderResponse2
+	)
+
+	if err = ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if req.Quantity != 1 {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid quantity")))
+		return
+	}
+
+	order := exchange.NewOrder2(req.Owner, req.Currency, req.Bid, req.Collection, req.TokenID, req.Quantity)
+	res.OrderID = order.ID
+
+	switch req.Type {
+	case exchange.LimitOrder:
+		res.Matches, err = s.ex.PlaceLimitOrder(req.Market, req.Price, order)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+			return
+		}
+		ctx.JSON(http.StatusOK, res)
+	case exchange.MarketOrder:
+		res.Matches, err = s.ex.PlaceMarketOrder(req.Market, order)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+		}
+		ctx.JSON(http.StatusOK, res)
 	default:
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("unknown order type")))
 	}

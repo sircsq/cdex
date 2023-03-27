@@ -2,7 +2,6 @@ package api
 
 import (
 	"cdex/exchange"
-	"cdex/exchange/orderbook"
 	"errors"
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -21,15 +20,16 @@ type PlaceOrderRequest struct {
 }
 
 type OrderData struct {
-	ID         int64   `json:"id"`
-	Currency   string  `json:"currency"`
-	Owner      string  `json:"owner"`
-	Bid        bool    `json:"bid"`
-	Collection int     `json:"collection"`
-	TokenID    int     `json:"token_id"`
-	Quantity   int     `json:"quantity"`
-	Price      float64 `json:"price"`
-	Timestamp  int64   `json:"timestamp"`
+	ID         string               `json:"id"`
+	Currency   string               `json:"currency"`
+	Owner      string               `json:"owner"`
+	Bid        bool                 `json:"bid"`
+	Collection int                  `json:"collection"`
+	TokenID    int                  `json:"token_id"`
+	Quantity   int                  `json:"quantity"`
+	Price      float64              `json:"price"`
+	Timestamp  int64                `json:"timestamp"`
+	Status     exchange.OrderStatus `json:"status"`
 }
 
 type OrderBookData struct {
@@ -66,6 +66,7 @@ func (s *Server) getMartBook(ctx *gin.Context) {
 				Quantity:   o.Quantity,
 				Timestamp:  o.Timestamp,
 				Price:      limit.Price,
+				Status:     o.Status,
 			}
 			orderBookData.Asks = append(orderBookData.Asks, &order)
 		}
@@ -83,6 +84,7 @@ func (s *Server) getMartBook(ctx *gin.Context) {
 				Quantity:   o.Quantity,
 				Timestamp:  o.Timestamp,
 				Price:      limit.Price,
+				Status:     o.Status,
 			}
 			orderBookData.Bids = append(orderBookData.Bids, &order)
 		}
@@ -91,12 +93,16 @@ func (s *Server) getMartBook(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, orderBookData)
 }
 
+type PlaceOrderResponse struct {
+	OrderID string `json:"order_id"`
+}
+
 func (s *Server) placeOrder(ctx *gin.Context) {
 	var (
 		err     error
 		req     PlaceOrderRequest
-		ob      *orderbook.OrderBook
-		matches []orderbook.Match
+		res     PlaceOrderResponse
+		matches []exchange.Match
 	)
 
 	if err = ctx.ShouldBindJSON(&req); err != nil {
@@ -104,24 +110,23 @@ func (s *Server) placeOrder(ctx *gin.Context) {
 		return
 	}
 
-	ob, err = s.ex.OrderBook(req.Market)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	o := orderbook.NewOrder(req.Owner, req.Currency, req.Bid, req.Collection, req.TokenID, req.Quantity)
+	order := exchange.NewOrder(req.Owner, req.Currency, req.Bid, req.Collection, req.TokenID, req.Quantity, exchange.PendingOrder)
+	res.OrderID = order.ID
 
 	switch req.Type {
 	case exchange.LimitOrder:
-		ob.PlaceLimitOrder(req.Price, o)
-		ctx.JSON(http.StatusOK, msgResponse("limit order placed"))
-	case exchange.MarketOrder:
-		matches, err = ob.PlaceMarketOrder(o)
+		err = s.ex.PlaceLimitOrder(req.Market, req.Price, order)
 		if err != nil {
 			ctx.JSON(http.StatusBadRequest, errorResponse(err))
 			return
 		}
+		ctx.JSON(http.StatusOK, res)
+	case exchange.MarketOrder:
+		matches, err = s.ex.PlaceMarketOrder(req.Market, order)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		}
+		//_ = matches
 		ctx.JSON(http.StatusOK, matches)
 	default:
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("unknown order type")))
@@ -131,14 +136,14 @@ func (s *Server) placeOrder(ctx *gin.Context) {
 type CancelOrderRequest struct {
 	Market exchange.Market `json:"market" binding:"required"`
 	Bid    bool            `json:"bid" binding:"required"`
-	ID     int64           `json:"id" binding:"required"`
+	ID     string          `json:"id" binding:"required"`
 }
 
 func (s *Server) cancelOrder(ctx *gin.Context) {
 	var (
 		err error
 		req CancelOrderRequest
-		ob  *orderbook.OrderBook
+		ob  *exchange.OrderBook
 	)
 
 	if err = ctx.ShouldBindJSON(&req); err != nil {

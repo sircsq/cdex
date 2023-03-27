@@ -1,33 +1,41 @@
-package orderbook
+package exchange
 
 import (
+	"bytes"
+	"cdex/utils"
+	"encoding/gob"
 	"errors"
 	"fmt"
-	"math/rand"
 	"sort"
+	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
+)
+
+type OrderStatus string
+
+const (
+	PendingOrder  OrderStatus = "pending"
+	FilledOrder   OrderStatus = "filled"
+	CanceledOrder OrderStatus = "canceled"
 )
 
 type Match struct {
-	Collection int
-	TokenID    int
-	SizeFilled int
-	Price      float64
-	Timestamp  int64
-	Ask        *Order
-	Bid        *Order
+	Collection int     `json:"collection"`
+	TokenID    int     `json:"token_id"`
+	SizeFilled int     `json:"size_filled"`
+	Price      float64 `json:"price"`
+	Timestamp  int64   `json:"timestamp"`
+	Ask        *Order  `json:"ask"`
+	Bid        *Order  `json:"bid"`
 }
 
 type Order struct {
-	ID         int64
-	Currency   string
-	Owner      string
-	Collection int
-	TokenID    int
-	Quantity   int
-	Bid        bool
-	Limit      *Limit
-	Timestamp  int64
+	ID    string
+	Limit *Limit
+
+	OrderRaw
 }
 
 type Orders []*Order
@@ -44,17 +52,47 @@ func (o Orders) Less(i, j int) bool {
 	return o[i].Timestamp < o[j].Timestamp
 }
 
-func NewOrder(owner, currency string, bid bool, collection, tokenID, quantity int) *Order {
-	return &Order{
-		ID:         int64(rand.Intn(100000000)),
+type OrderRaw struct {
+	Currency   string
+	Owner      string
+	Collection int
+	TokenID    int
+	Quantity   int
+	Bid        bool
+	Timestamp  int64
+	Status     OrderStatus
+}
+
+func (or *OrderRaw) ID() string {
+	var (
+		err error
+		buf bytes.Buffer
+	)
+
+	enc := gob.NewEncoder(&buf)
+	err = enc.Encode(*or)
+	if err != nil {
+		return ""
+	}
+
+	return utils.MD5(buf.Bytes())
+}
+
+func NewOrder(owner, currency string, bid bool, collection, tokenID, quantity int, status OrderStatus) *Order {
+	raw := OrderRaw{
 		Currency:   currency,
 		Owner:      owner,
 		Collection: collection,
 		TokenID:    tokenID,
 		Quantity:   quantity,
 		Bid:        bid,
-		Limit:      nil,
 		Timestamp:  time.Now().UnixNano(),
+		Status:     status,
+	}
+
+	return &Order{
+		ID:       raw.ID(),
+		OrderRaw: raw,
 	}
 }
 
@@ -63,7 +101,15 @@ func (o *Order) String() string {
 }
 
 func (o *Order) IsFilled() bool {
-	return o.Quantity == 0.0
+	return o.Quantity == 0
+}
+
+func (o *Order) Type() string {
+	if o.Bid {
+		return "BID"
+	}
+
+	return "ASK"
 }
 
 type Limit struct {
@@ -145,6 +191,7 @@ func (l *Limit) Fill(o *Order) []Match {
 
 	for _, order := range l.Orders {
 		if o.IsFilled() {
+			o.Status = FilledOrder
 			break
 		}
 
@@ -156,6 +203,7 @@ func (l *Limit) Fill(o *Order) []Match {
 		matches = append(matches, match)
 		l.TotalVolume -= match.SizeFilled
 		if order.IsFilled() {
+			order.Status = FilledOrder
 			ordersToDelete = append(ordersToDelete, order)
 		}
 	}
@@ -188,11 +236,11 @@ func (l *Limit) fillOrder(a, b *Order) (Match, error) {
 	if a.Quantity > b.Quantity {
 		a.Quantity -= b.Quantity
 		sizeFilled = b.Quantity
-		b.Quantity = 0.0
+		b.Quantity = 0
 	} else {
 		b.Quantity -= a.Quantity
 		sizeFilled = a.Quantity
-		a.Quantity = 0.0
+		a.Quantity = 0
 	}
 
 	return Match{
@@ -207,10 +255,12 @@ func (l *Limit) fillOrder(a, b *Order) (Match, error) {
 }
 
 type OrderBook struct {
+	mu        *sync.RWMutex
 	asks      []*Limit
 	bids      []*Limit
 	AskLimits map[float64]*Limit
 	BidLimits map[float64]*Limit
+	Orders    map[string]*Order
 }
 
 func NewOrderBook() *OrderBook {
@@ -219,10 +269,15 @@ func NewOrderBook() *OrderBook {
 		bids:      []*Limit{},
 		AskLimits: make(map[float64]*Limit),
 		BidLimits: make(map[float64]*Limit),
+		Orders:    make(map[string]*Order),
+		mu:        &sync.RWMutex{},
 	}
 }
 
-func (ob *OrderBook) PlaceMarketOrder(o *Order) ([]Match, error) {
+func (ob *OrderBook) placeMarketOrder(o *Order) ([]Match, error) {
+	ob.mu.Lock()
+	defer ob.mu.Unlock()
+
 	var (
 		matches []Match
 	)
@@ -257,8 +312,12 @@ func (ob *OrderBook) PlaceMarketOrder(o *Order) ([]Match, error) {
 	return matches, nil
 }
 
-func (ob *OrderBook) PlaceLimitOrder(price float64, o *Order) {
+func (ob *OrderBook) placeLimitOrder(price float64, o *Order) {
+	ob.mu.Lock()
+	ob.mu.Unlock()
+
 	var limit *Limit
+
 	if o.Bid {
 		limit = ob.BidLimits[price]
 	} else {
@@ -276,6 +335,14 @@ func (ob *OrderBook) PlaceLimitOrder(price float64, o *Order) {
 		}
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"price": limit.Price,
+		"type":  o.Type(),
+		"size":  o.Quantity,
+		"owner": o.Owner,
+	}).Info("new limit order")
+
+	ob.Orders[o.ID] = o
 	limit.AddOrder(o)
 }
 

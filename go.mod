@@ -4,6 +4,8 @@ go 1.19
 
 require (
 	github.com/gin-gonic/gin v1.9.0
+	github.com/gorilla/websocket v1.5.0
+	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/viper v1.15.0
 	github.com/uptrace/bun v1.1.12
 	github.com/uptrace/bun/dialect/pgdialect v1.1.12

@@ -4,21 +4,26 @@ import (
 	"cdex/db"
 	"cdex/exchange"
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
+	"sync"
 )
 
 // Server serves HTTP requests for our banking service.
 type Server struct {
-	ex     *exchange.Exchange
-	store  db.Storage
-	router *gin.Engine
+	ex      *exchange.Exchange
+	store   db.Storage
+	router  *gin.Engine
+	mu      sync.RWMutex
+	clients map[string]*websocket.Conn
 }
 
 // NewServer creates a new HTTP server and setup routing.
 func NewServer(store db.Storage) *Server {
 	ex := exchange.NewExchange()
 	server := &Server{
-		ex:    ex,
-		store: store,
+		ex:      ex,
+		store:   store,
+		clients: make(map[string]*websocket.Conn),
 	}
 
 	router := gin.Default()
@@ -41,6 +46,8 @@ func NewServer(store db.Storage) *Server {
 	router.GET("/api/book/:market", server.getMartBook)
 	router.POST("/api/order", server.placeOrder)
 	router.POST("/api/order/cancel", server.cancelOrder)
+
+	router.GET("/api/subscribe", server.subscribe)
 
 	server.router = router
 

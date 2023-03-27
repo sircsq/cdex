@@ -4,6 +4,7 @@ import (
 	"cdex/exchange"
 	"context"
 	"database/sql"
+	"fmt"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/driver/pgdriver"
@@ -21,6 +22,7 @@ type Storage interface {
 	GetCollectionItems(ctx context.Context, id, page, pageSize int) ([]*Item, error)
 
 	GetOrders(ctx context.Context, bid, page, pageSize int, status, sort string) ([]*exchange.Order, error)
+	UpdateOrderStatus(ctx context.Context, id, status string) error
 }
 
 type NartDB struct {
@@ -148,6 +150,7 @@ func (db *NartDB) GetOrders(ctx context.Context, bid, page, pageSize int, status
 		err    error
 		orders []*exchange.Order
 	)
+	fmt.Println(bid, page, pageSize, status, sort)
 	if sort == "desc" {
 		err = db.db.NewSelect().Model((*exchange.Order)(nil)).Where("bid = ? AND status = ?", bid, status).Order("created_at DESC").Limit(pageSize).Offset(pageSize*(page-1)).Scan(ctx, &orders)
 	} else {
@@ -159,4 +162,13 @@ func (db *NartDB) GetOrders(ctx context.Context, bid, page, pageSize int, status
 	}
 
 	return orders, nil
+}
+
+func (db *NartDB) UpdateOrderStatus(ctx context.Context, id, status string) error {
+	var err error
+	_, err = db.db.NewUpdate().Model((*exchange.Order)(nil)).Set("status = ?", status).Where("id = ?", id).Exec(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
 }

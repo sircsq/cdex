@@ -154,11 +154,11 @@ func (s *Server) getBidOrders(ctx *gin.Context) {
 		status   = "pending"
 	)
 	sortParam, _ := ctx.GetQuery("sort")
-	if sortParam != "desc" {
+	if len(sortParam) != 0 {
 		sort = sortParam
 	}
 	statusParam, _ := ctx.GetQuery("status")
-	if statusParam != "pending" {
+	if len(statusParam) != 0 {
 		status = statusParam
 	}
 
@@ -182,7 +182,7 @@ func (s *Server) getBidOrders(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
 		return
 	}
-
+	fmt.Println(len(orders))
 	ctx.JSON(http.StatusOK, orders)
 }
 
@@ -196,11 +196,11 @@ func (s *Server) getAskOrders(ctx *gin.Context) {
 		status   = "pending"
 	)
 	sortParam, _ := ctx.GetQuery("sort")
-	if sortParam != "desc" {
+	if len(sortParam) != 0 {
 		sort = sortParam
 	}
 	statusParam, _ := ctx.GetQuery("status")
-	if statusParam != "pending" {
+	if len(statusParam) != 0 {
 		status = statusParam
 	}
 
@@ -273,6 +273,19 @@ type CancelOrderRequest struct {
 }
 
 func (s *Server) cancelOrder(ctx *gin.Context) {
+	var err error
+	orderID := ctx.Param("id")
+
+	err = s.store.UpdateOrderStatus(ctx, orderID, "canceled")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, msgResponse("order canceled"))
+}
+
+func (s *Server) cancelOrder2(ctx *gin.Context) {
 	var (
 		err error
 		req CancelOrderRequest
